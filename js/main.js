@@ -12,18 +12,20 @@
 // 	).changed(function() { this.objectItem.updateName(); });
 
 var graph;
+var canvas;
 var breakLoop = false;
 var fontSize = 20;
 
 function setup() {
-	createCanvas(window.innerWidth, window.innerHeight);
+	let renderer = createCanvas(window.innerWidth, window.innerHeight);
+	canvas = renderer.elt.getContext("2d");
+	textFont('arial', fontSize);
+	textAlign(LEFT, TOP);
 	graph = new Graph();
 	graph.addObject(100, 100);
 	strokeCap(ROUND);
 	strokeJoin(ROUND);
 	ellipseMode(CORNER);
-	textFont('arial', fontSize);
-	textAlign(LEFT, TOP);
 }
 
 function draw() {

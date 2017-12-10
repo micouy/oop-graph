@@ -96,6 +96,10 @@ function isFunction(f) {
 	return typeof f == 'function';
 }
 
+function measureText(text) {
+	return canvas.measureText(text).width;
+}
+
 Array.prototype.sum = function(itemFunction) {
 	let sum = 0;
 	let f;
@@ -147,6 +151,14 @@ Array.prototype.min = function(itemFunction) {
 	}
 
 	return min;
+}
+
+Array.prototype.remove = function(item) {
+	let index = this.indexOf(item);
+
+	if (index > -1) {
+		this.splice(index, 1);
+	}
 }
 
 

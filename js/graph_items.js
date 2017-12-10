@@ -309,16 +309,7 @@ class ObjectItem extends Container {
 		this.z = z;
 		this.name = "";
 
-		this.titleContainer = new Container(graph, this, this.width, 50);
-		this.titleContainer.titleInput = new TextInput(graph, this.titleContainer);
-		this.titleContainer.updateValue = function(value) {
-			this.titleInput.setValue(value);
-		}
-		this.titleContainer.setContentDirection(ROW);
-		this.titleContainer.addChildren([
-			new ChildNode(graph, this.titleContainer),
-			this.titleContainer.titleInput,
-		]);
+		this.titleContainer = new TitleContainer(graph, this);
 		this.mainContainer = new Container(graph, this, this.width, 100);
 		this.addChildren([
 			this.titleContainer,
@@ -332,8 +323,8 @@ class ObjectItem extends Container {
 		}, "last"));
 	}
 
-	updateValue(value) {
-		this.titleContainer.updateValue(value);
+	setValue(value) {
+		this.titleContainer.setValue(value);
 	}
 
 	getZ() { return this.z; }
@@ -458,7 +449,6 @@ class Node extends ClickableItem {
 		this.diameter = diameter;
 		this.setMargin(5, 10, 5, 10);
 		this.temporaryNode = null;
-		// this.originalPos = { x: this.x, y: this.y };
 		this.temporaryCurve = [];
 	}
 
@@ -567,7 +557,7 @@ class ParentNode extends Node {
 
 	doubleClick() {
 		if (this.childNode) {
-			this.childNode.removeParentNode();
+			this.childNode.removeParentNode(this);
 			this.removeChildNode();
 		}
 	}
@@ -618,12 +608,12 @@ class ChildNode extends Node {
 		this.parentNodes = [];
 	}
 
-	updateValue(value) {
+	setValue(value) {
 		let objectItem = this.getObjectItem();
 		for (let parentNode of this.parentNodes) {
 			parentNode.updateAttributeType(value);
 		}
-		objectItem.updateValue(value);
+		objectItem.setValue(value);
 	}
 
 	click(x, y) {
@@ -645,7 +635,7 @@ class ChildNode extends Node {
 
 	addParentNode(parentNode) {
 		this.parentNodes.push(parentNode);
-		this.parentNodes[this.parentNodes.length - 1].updateCurve();
+		parentNode.updateCurve();
 	}
 
 	removeParentNode(node) {
@@ -679,6 +669,38 @@ class ChildNode extends Node {
 }
 
 
+class TitleContainer extends Container {
+	constructor(graph, parent, order) {
+		super(graph, parent, 150, 30, order);
+		this.setContentDirection(ROW);
+		this.setContentAlignment(CENTER);
+		this.node = new ChildNode(graph, this);
+		this.typeInput = new TextInput(graph, this).setMargin(0, 5, 0, 0);
+		this.typeInput.afterChange = function() {
+			this.parent.updateParentNodesValue(this.getValue());
+		}
+		this.addChildren([
+			this.node,
+			this.typeInput,
+		]);
+	}
+
+	connectTo(attributeItem) {
+		this.node.addParentNode(attributeItem.node);
+		attributeItem.setType(this.typeInput.getValue());
+	}
+
+	setValue(value) {
+		this.typeInput.setValue(value);
+		return this;
+	}
+
+	updateParentNodesValue(value) {
+		this.node.setValue(value);
+	}
+}
+
+
 class AttributeItem extends Container {
 	constructor(graph, parent, order) {
 		super(graph, parent, 150, 30, order);
@@ -686,19 +708,25 @@ class AttributeItem extends Container {
 		this.setContentAlignment(CENTER);
 		this.nameInput = new TextInput(graph, this).setMargin(0, 5, 0, 0);
 		this.typeInput = new TextInput(graph, this);
-		this.typeInput.afterChange = function() {
+		this.typeInput.afterInput = function() {
 			this.parent.updateChildNodeValue(this.getValue());
 		}
 		this.node = new ParentNode(graph, this);
 		this.addChildren([
 			this.nameInput,
+			new TextBoard(graph, this).setValue(" : "),
 			this.typeInput,
 			this.node,
 		]);
 	}
 
+	connectTo(titleContainer) {
+		this.node.setChildNode(titleContainer.node);
+	}
+
 	updateChildNodeValue(value) {
-		this.node.childNode.updateValue(value);
+		if (!this.node.childNode) { return; }
+		this.node.childNode.setValue(value);
 	}
 
 	draw() {
@@ -754,12 +782,15 @@ class ClickableUIItem extends ClickableItem {
 
 class TextInput extends ClickableUIItem {
 	constructor(graph, parent, order) {
-		super(graph, parent, 150, 30, order);
+		super(graph, parent, 80, 30, order);
 		this.text = "";
 		this.inputActive = false;
-		this.element = createInput("asdasd");
+		this.element = createInput(this.text);
 		this.element.owner = this;
 		this.element.initialWidth = this.width;
+		this.element.initialHeight = this.height;
+		this.element.actualWidth = this.width;
+		this.element.actualHeight = this.height;
 		this.element
 			.size(this.width, this.height)
 			.style("border", "none")
@@ -768,22 +799,44 @@ class TextInput extends ClickableUIItem {
 			.style("background", color(ALMOST_WHITE))
 			.style("color", color(ALMOST_BLACK))
 			.attribute("spellcheck", false);
+
 		this.element.input(function() {
-			this.size(Math.max((this.value().length + 1) * 10.7, this.initialWidth), this.height);
-			this.owner.rearrange();
+			this.owner.updateSize();
 			this.owner.updateText();
+			this.owner.afterInput();
 		});
+
 		this.element.changed(function() {
 			this.owner.afterChange();
-		})
+		});
+
+		this.element.updateSize = function() {
+			let width = Math.max(measureText(this.value()), this.initialWidth);
+			this.size(width, this.initialHeight);
+			this.actualWidth = width;
+		}
+
 		this.element.elt.addEventListener("blur", function() {
 			this.style.display = "none";
 		});
+
 		this.element.hide();
+		this.updateSize();
 	}
 
-	setValue(value) { this.element.value(value); }
+	setValue(value) {
+		this.element.value(value);
+		this.updateSize();
+
+		return this;
+	}
+
 	getValue() { return this.element.value(); }
+
+	updateSize() {
+		this.element.updateSize();
+		this.rearrange();
+	}
 
 	updatePosition(x, y) {
 		super.updatePosition(x, y);
@@ -795,8 +848,8 @@ class TextInput extends ClickableUIItem {
 	}
 
 	rearrange() {
-		this.width = this.element.size().width;
-		this.totalWidth = this.width;
+		this.width = this.element.actualWidth;
+		this.totalWidth = this.width + this.margin.getX();
 		this.parent.rearrange();
 	}
 
@@ -814,25 +867,41 @@ class TextInput extends ClickableUIItem {
 		noStroke();
 		fill(ALMOST_WHITE);
 		rect(this.x, this.y, this.width, this.height);
-		fill(RED);
+		fill(ALMOST_BLACK);
 		text(this.element.value(), this.x, this.y + 4);
 	}
 
 	afterChange() { }
+	afterInput() { }
 }
 
 
 class TextBoard extends UIItem {
-	constructor(graph, parent, text, order) {
-		super(graph, parent, 100, 30, order);
-		this.padding = new Compass(5);
-		this.text = ": asdasd";
+	constructor(graph, parent, order) {
+		super(graph, parent, 50, 30, order);
+		this.padding = new Compass(0, 10, 0, 10);
+		this.initialWidth = this.width;
+		this.value = "";
+	}
+
+	setValue(value) {
+		this.value = value;
+		this.updateSize();
+
+		return this;
+	}
+
+	getValue() { return this.value; }
+
+	updateSize() {
+		this.width = Math.max(measureText(this.value), this.initialWidth);
+		this.totalWidth = this.width;
 	}
 
 	draw() {
 		noStroke();
 		fill(ALMOST_BLACK);
-		text(this.text, this.x + this.padding.getLeft(), this.y + this.padding.getTop());
+		text(this.value, this.x + this.padding.getLeft(), this.y + this.padding.getTop());
 	}
 }
 
