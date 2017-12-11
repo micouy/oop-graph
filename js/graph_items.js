@@ -707,26 +707,23 @@ class AttributeItem extends Container {
 		this.setContentDirection(ROW);
 		this.setContentAlignment(CENTER);
 		this.nameInput = new TextInput(graph, this).setMargin(0, 5, 0, 0);
-		this.typeInput = new TextInput(graph, this);
-		this.typeInput.afterInput = function() {
-			this.parent.updateChildNodeValue(this.getValue());
-		}
+		this.typeField = new TextBoard(graph, this);
+		// this.typeInput = new TextInput(graph, this);
+		// this.typeInput.afterInput = function() {
+		// 	this.parent.updateChildNodeValue(this.getValue());
+		// }
 		this.node = new ParentNode(graph, this);
 		this.addChildren([
 			this.nameInput,
 			new TextBoard(graph, this).setValue(" : "),
-			this.typeInput,
+			this.typeField,
+			// this.typeInput,
 			this.node,
 		]);
 	}
 
 	connectTo(titleContainer) {
 		this.node.setChildNode(titleContainer.node);
-	}
-
-	updateChildNodeValue(value) {
-		if (!this.node.childNode) { return; }
-		this.node.childNode.setValue(value);
 	}
 
 	draw() {
