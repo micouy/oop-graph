@@ -19,7 +19,7 @@ var fontSize = 20;
 function setup() {
 	let renderer = createCanvas(window.innerWidth, window.innerHeight);
 	canvas = renderer.elt.getContext("2d");
-	textFont('arial', fontSize);
+	textFont('monospace', fontSize);
 	textAlign(LEFT, TOP);
 	graph = new Graph();
 	graph.addObject(100, 100);

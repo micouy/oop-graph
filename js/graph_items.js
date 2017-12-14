@@ -110,7 +110,7 @@ class GraphItem {
 		noFill();
 		stroke(RED);
 		strokeWeight(MEDIUM);
-		rect(this.x, this.y, this.width, this.height);
+		rect(this.x, this.y, this.totalWidth, this.totalHeight);
 	}
 }
 
@@ -514,7 +514,7 @@ class ParentNode extends Node {
 	}
 
 	updateAttributeType(value) {
-		this.parent.typeInput.setValue(value);
+		this.parent.typeField.setValue(value);
 	}
 
 	click(x, y) {
@@ -594,7 +594,7 @@ class ParentNode extends Node {
 		super.draw();
 		if (this.childNode) {
 			noFill();
-			let c = color(DARK_GRAY);
+			let c = color(DARK_GRAY, 120);
 			stroke(c);
 			bezier(...this.curve);
 		}
@@ -711,7 +711,7 @@ class AttributeItem extends Container {
 		// this.typeInput = new TextInput(graph, this);
 		// this.typeInput.afterInput = function() {
 		// 	this.parent.updateChildNodeValue(this.getValue());
-		// }
+		// }©
 		this.node = new ParentNode(graph, this);
 		this.addChildren([
 			this.nameInput,
@@ -724,6 +724,8 @@ class AttributeItem extends Container {
 
 	connectTo(titleContainer) {
 		this.node.setChildNode(titleContainer.node);
+		console.log(titleContainer.typeInput.getValue());
+		this.textField.setValue(titleContainer.typeInput.getValue());
 	}
 
 	draw() {
@@ -892,10 +894,12 @@ class TextBoard extends UIItem {
 
 	updateSize() {
 		this.width = Math.max(measureText(this.value), this.initialWidth);
-		this.totalWidth = this.width;
+		this.totalWidth = this.width + this.padding.getX();
+		this.parent.rearrange();
 	}
 
 	draw() {
+		this.drawBounds();
 		noStroke();
 		fill(ALMOST_BLACK);
 		text(this.value, this.x + this.padding.getLeft(), this.y + this.padding.getTop());
