@@ -100,6 +100,21 @@ function measureText(text) {
 	return canvas.measureText(text).width;
 }
 
+function connectNodes(parentNode, childNode) {
+	parentNode.connect(childNode);
+	childNode.connect(parentNode);
+	parentNode.updateCurve();
+}
+
+function connectAttrWithTitleContainer(attributeItem, titleContainer) {
+	connectNodes(titleContainer.getNode(), attributeItem.getNode());
+	attributeItem.setAttrType(titleContainer.getValue());
+}
+
+function hasChildren(item) {
+	return item.hasOwnProperty("children");
+}
+
 Array.prototype.sum = function(itemFunction) {
 	let sum = 0;
 	let f;
