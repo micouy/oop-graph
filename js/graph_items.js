@@ -731,6 +731,7 @@ class AttributeItem extends Container {
 		super(graph, parent, 150, 30, order);
 		this.setContentDirection(ROW);
 		this.setContentAlignment(CENTER);
+<<<<<<< HEAD
 		this.nameField = new TextInput(graph, this).setMargin(0, 5, 0, 0);
 		this.typeField = new TextField(graph, this);
 		this.node = new ParentNode(graph, this);
@@ -738,14 +739,33 @@ class AttributeItem extends Container {
 			this.nameField,
 			new TextField(graph, this).setValue(" : "),
 			this.typeField,
+=======
+		this.nameInput = new TextInput(graph, this).setMargin(0, 5, 0, 0);
+		this.typeField = new TextBoard(graph, this);
+		// this.typeInput = new TextInput(graph, this);
+		// this.typeInput.afterInput = function() {
+		// 	this.parent.updateChildNodeValue(this.getValue());
+		// }
+		this.node = new ParentNode(graph, this);
+		this.addChildren([
+			this.nameInput,
+			new TextBoard(graph, this).setValue(" : "),
+			this.typeField,
+			// this.typeInput,
+>>>>>>> 33087105ee01621e8cb113a22e84310baadfca66
 			this.node,
 		]);
 	}
 
 	getNode() { return this.node; }
 
+<<<<<<< HEAD
 	setAttrType(type) {
 		this.typeField.setValue(type);
+=======
+	draw() {
+		this.drawChildren();
+>>>>>>> 33087105ee01621e8cb113a22e84310baadfca66
 	}
 }
 
