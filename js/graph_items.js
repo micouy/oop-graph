@@ -72,7 +72,7 @@ class GraphItem {
 	}
 
 	hasDescendant(object) {
-		if (this instanceof Container) {
+		if (hasChildren(this)) {
 			for (let child of this.children) {
 				if (child == object) { return true; }
 				else if (child.hasDescendant(object)) { return true; }
@@ -91,6 +91,23 @@ class GraphItem {
 		}
 
 		return parent.hasDescendant(object);
+	}
+
+	findAmongChildren(cls) {
+		let found = [];
+
+		if (hasChildren(this)) {
+			for (let child of this.children) {
+				if (child instanceof cls) { found.push(child); }
+				else { found.extend(child.findInFamily(cls)); }
+			}
+		}
+
+		return found;
+	}
+
+	findInFamily(cls) {
+		return this.getObjectItem().findAmongChildren();
 	}
 
 	getObjectItem() {
@@ -176,6 +193,8 @@ class Container extends GraphItem {
 		this.children.push.apply(this.children, children);
 		this.rearrange();
 	}
+
+	getChildren() { return this.children; }
 
 	updateDividers() {
 		for (let child of this.children) {
@@ -323,8 +342,8 @@ class ObjectItem extends Container {
 		}, "last"));
 	}
 
-	setValue(value) {
-		this.titleContainer.setValue(value);
+	setType(value) {
+		this.titleContainer.setType(value);
 	}
 
 	getZ() { return this.z; }
@@ -537,14 +556,15 @@ class ParentNode extends Node {
 		this.updateCurve();
 	}
 
-	hasChildNode() { return !!this.childNode; }
+	connectable() { return !!this.childNode; }
 
-	setChildNode(childNode) {
-		this.childNode = childNode;
-		this.updateCurve();
+	connect(node) {
+		if (node instanceof ChildNode && this.connectable()) {
+			this.parentNodes.push(parentNode);
+		}
 	}
 
-	removeChildNode() {
+	disconnect() {
 		this.childNode = null;
 		this.curve = [];
 	}
@@ -582,8 +602,10 @@ class ParentNode extends Node {
 
 			for (let node of queue) {
 				if (!this.hasInFamily(node)) {
-					this.setChildNode(node);
-					node.addParentNode(this);
+					connectAttrWithTitleContainer(
+						node.findInFamily(TitleContainer)[0],
+						this.findInFamily(AttributeItem)[0]
+					);
 					break;
 				}
 			}
@@ -633,12 +655,13 @@ class ChildNode extends Node {
 		this.updateCurve();
 	}
 
-	addParentNode(parentNode) {
-		this.parentNodes.push(parentNode);
-		parentNode.updateCurve();
+	connect(node) {
+		if (node instanceof ParentNode && node.connectable()) {
+			this.parentNodes.push(parentNode);
+		}
 	}
 
-	removeParentNode(node) {
+	disconnect(node) {
 		this.parentNodes.remove(node);
 	}
 
@@ -658,9 +681,11 @@ class ChildNode extends Node {
 		if (queue.length) {
 			queue.sort(byZ);
 			for (let node of queue) {
-				if (!this.hasInFamily(node) && !node.hasChildNode()) {
-					this.addParentNode(node);
-					node.setChildNode(this);
+				if (!this.hasInFamily(node) && !node.connectable()) {
+					connectAttrWithTitleContainer(
+						this.findInFamily(TitleContainer)[0],
+						node.findInFamily(AttributeItem)[0]
+					);
 					break;
 				}
 			}
@@ -676,8 +701,8 @@ class TitleContainer extends Container {
 		this.setContentAlignment(CENTER);
 		this.node = new ChildNode(graph, this);
 		this.typeInput = new TextInput(graph, this).setMargin(0, 5, 0, 0);
-		this.typeInput.afterChange = function() {
-			this.parent.updateParentNodesValue(this.getValue());
+		this.typeInput.afterInput = function() {
+			this.parent.updateType();
 		}
 		this.addChildren([
 			this.node,
@@ -685,19 +710,19 @@ class TitleContainer extends Container {
 		]);
 	}
 
-	connectTo(attributeItem) {
-		this.node.addParentNode(attributeItem.node);
-		attributeItem.setType(this.typeInput.getValue());
-	}
+	getNode() { return this.node; }
 
-	setValue(value) {
-		this.typeInput.setValue(value);
+	setType(type) {
+		this.typeInput.setValue(type);
 		return this;
 	}
 
-	updateParentNodesValue(value) {
-		this.node.setValue(value);
+	getType() { return this.value; }
+
+	updateType() {
+		this.value = this.typeField.value();
 	}
+
 }
 
 
@@ -708,28 +733,19 @@ class AttributeItem extends Container {
 		this.setContentAlignment(CENTER);
 		this.nameInput = new TextInput(graph, this).setMargin(0, 5, 0, 0);
 		this.typeField = new TextBoard(graph, this);
-		// this.typeInput = new TextInput(graph, this);
-		// this.typeInput.afterInput = function() {
-		// 	this.parent.updateChildNodeValue(this.getValue());
-		// }©
 		this.node = new ParentNode(graph, this);
 		this.addChildren([
 			this.nameInput,
 			new TextBoard(graph, this).setValue(" : "),
 			this.typeField,
-			// this.typeInput,
 			this.node,
 		]);
 	}
 
-	connectTo(titleContainer) {
-		this.node.setChildNode(titleContainer.node);
-		console.log(titleContainer.typeInput.getValue());
-		this.textField.setValue(titleContainer.typeInput.getValue());
-	}
+	getNode() { return this.node; }
 
-	draw() {
-		this.drawChildren();
+	setAttrType(type) {
+		this.typeField.setValue(type);
 	}
 }
 
@@ -875,7 +891,7 @@ class TextInput extends ClickableUIItem {
 }
 
 
-class TextBoard extends UIItem {
+class TextField extends UIItem {
 	constructor(graph, parent, order) {
 		super(graph, parent, 50, 30, order);
 		this.padding = new Compass(0, 10, 0, 10);
