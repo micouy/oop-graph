@@ -1,14 +1,113 @@
 class Graph {
 	constructor() {
-		this.objectItems = [];
+		this.classItems = [];
 		this.lastClick = getTime();
-		this.mouse = new Mouse(this);
 		this.z = 0;
+		this.eventHandler = new EventHandler(this);
 	}
 
-	addObject(x, y) {
-		this.objectItems.push(new ObjectItem(graph, x, y, this.z));
+	getKeyboard() {
+		return this.eventHandler.getKeyboard();
+	}
+
+	getClickableItems() {
+		return this.eventHandler.getClickableItems();
+	}
+
+	getItemsAt(x, y, filter) {
+		let queue = this.classItems.slice();
+		let items = [];
+
+		while (queue.length) {
+			let item = queue[0];
+
+			items.push(item);
+
+			if (isFunction(item.getChildren)) {
+				queue.extend(item.getChildren());
+			}
+
+			queue.remove(item);
+		}
+
+		if (isFunction(filter)) {
+			return items.filter(function (item) {
+				return !(item instanceof Divider) && item.overlaps(x, y) && filter(item);
+			});
+		} else {
+			return items;
+		}
+	}
+
+	addClassItem(x, y) {
+		this.classItems.push(new ClassItem(graph, x, y, this.z));
 		this.z += 10;
+	}
+
+	addClickableItem(item) {
+		this.eventHandler.addClickableItem(item);
+	}
+
+	removeClickableItem(item) {
+		this.eventHandler.removeClickableItem(item);
+	}
+
+	update() {
+		this.eventHandler.update();
+	}
+
+	draw() {
+		noFill();
+		noStroke();
+		clear();
+
+		for (let i = 0; i < this.classItems.length; i++) {
+			this.classItems[i].draw();
+		}
+	}
+}
+
+
+class EventHandler {
+	constructor(graph) {
+		this.graph = graph;
+		this.mouse = new Mouse(graph, this);
+		this.keyboard = new Keyboard(graph, this);
+		this.activeItem = null;
+	}
+
+	getKeyboard() {
+		return this.keyboard;
+	}
+
+	handleActiveItem() {
+		let clickedItem = this.mouse.getClickedItem();
+
+		if (this.activeItem && clickedItem != this.activeItem) {
+			if (isFunction(this.activeItem.deactivate)) {
+				this.activeItem.deactivate();
+			}
+
+			this.activeItem = null;
+		}
+
+		if (!!clickedItem) {
+			this.activeItem = clickedItem;
+
+			if (isFunction(this.activeItem.activate)) {
+				this.activeItem.activate();
+			}
+		}
+
+		if (this.activeItem instanceof InputItem) {
+			this.keyboard.setActiveInput(this.activeItem);
+		} else {
+			this.keyboard.removeActiveInput();
+		}
+	}
+
+	update() {
+		this.mouse.update();
 	}
 
 	addClickableItem(item) {
@@ -22,35 +121,22 @@ class Graph {
 	getClickableItems() {
 		return this.mouse.getClickableItems();
 	}
-
-	update() {
-		this.mouse.update();
-	}
-
-	draw() {
-		noFill();
-		noStroke();
-		clear();
-
-		for (let i = 0; i < this.objectItems.length; i++) {
-			this.objectItems[i].draw();
-		}
-	}
 }
 
 
 class Mouse {
-	constructor(graph) {
+	constructor(graph, parent) {
 		this.graph = graph;
-		this.x = mouseX; this.y = mouseY;
-		this.previousPos = { x: mouseX, y: mouseY };
-		this.pressed = {x: 0, y: 0};
+		this.parent = parent;
+		this.x = 0;
+		this.y = 0;
+		this.previousPos = { x: 0, y: 0 };
+		this.pressed = { x: 0, y: 0 };
 		this.lastClick = getTime();
 		this.isPressed = false;
 		this.isDragging = false;
 		this.clickable = [];
 		this.clickedItem = null;
-		this.activeItem = null;
 		this.hoveredItem = null;
 	}
 
@@ -82,21 +168,7 @@ class Mouse {
 					this.clickedItem = null;
 				}
 
-				if (this.activeItem && this.clickedItem != this.activeItem) {
-					if (isFunction(this.activeItem.deactivate)) {
-						this.activeItem.deactivate();
-					}
-
-					this.activeItem = null;
-				}
-
-				if (this.clickedItem) {
-					this.activeItem = this.clickedItem;
-
-					if (isFunction(this.activeItem.activate)) {
-						this.activeItem.activate();
-					}
-				}
+				this.handleActiveItem();
 
 				this.click();
 			} else {
@@ -139,6 +211,10 @@ class Mouse {
 		this.previousPos.y = this.y;
 	}
 
+	handleActiveItem() {
+		this.parent.handleActiveItem();
+	}
+
 	addClickableItem(item) {
 		this.clickable.push(item);
 	}
@@ -151,6 +227,10 @@ class Mouse {
 		return this.clickable;
 	}
 
+	getClickedItem() {
+		return this.clickedItem;
+	}
+
 	hasMoved() {
 		return !(this.x == this.previousPos.x
 		&& this.y == this.previousPos.y);
@@ -158,7 +238,7 @@ class Mouse {
 
 	click() {
 		if (this.doubleClicked() && !this.clickedItem) {
-			this.graph.addObject(mouseX, mouseY);
+			this.graph.addClassItem(mouseX, mouseY);
 		}
 
 		this.lastClick = getTime();
@@ -184,4 +264,86 @@ class Mouse {
 
 		return null;
 	}
+}
+
+
+class Keyboard {
+  constructor(graph, parent) {
+    this.graph = graph;
+		this.parent = parent;
+    this.keysDown = {
+      alt: false,
+      backspace: false,
+      leftArrow: false,
+      rightArrow: false,
+    };
+    this.activeInput = null;
+  }
+
+  removeActiveInput() {
+    if (!!this.activeInput) {
+      this.activeInput.deactivate();
+      this.activeInput = null;
+    }
+  }
+
+  setActiveInput(input) {
+    this.removeActiveInput();
+    this.activeInput = input;
+    this.activeInput.activate();
+  }
+
+  sendKeyEventToInput(key) {
+    if (!!this.activeInput) {
+      this.activeInput.keysPressed(this.keysDown);
+    }
+  }
+
+  keyPressed(event) {
+    if (event.key.length == 1) {
+      if (!!this.activeInput) {
+        this.activeInput.charPressed(event.key);
+      }
+    } else {
+      switch (event.code) {
+        case "AltLeft":
+          this.keysDown.alt = true;
+          this.sendKeyEventToInput(event.code);
+          break;
+        case "ArrowLeft":
+          this.keysDown.leftArrow = true;
+          this.sendKeyEventToInput(event.code);
+          break;
+        case "ArrowRight":
+          this.keysDown.rightArrow = true;
+          this.sendKeyEventToInput(event.code);
+          break;
+        case "Backspace":
+          this.keysDown.backspace = true;
+          this.sendKeyEventToInput(event.code);
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  keyReleased(event) {
+    switch (event.code) {
+      case "AltLeft":
+        this.keysDown.alt = false;
+        break;
+      case "ArrowLeft":
+        this.keysDown.leftArrow = false;
+        break;
+      case "ArrowRight":
+        this.keysDown.rightArrow = false;
+        break;
+      case "Backspace":
+        this.keysDown.backspace = false;
+        break;
+      default:
+        break;
+    }
+  }
 }

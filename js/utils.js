@@ -3,6 +3,7 @@ const DARK_GRAY = 120;
 const GRAY = 180;
 const LIGHT_GRAY = 230;
 const ALMOST_WHITE = 245;
+const ALMOST_WHITE_BUT_RED = [255, 220, 220];
 const ALMOST_BLACK = 90;
 const RED = [255, 0, 0];
 
@@ -45,10 +46,10 @@ function calcDistance(x1, y1, x2, y2) {
 }
 
 function getBezierCurve(a, b) {
-	var min = (Math.min(a.x, b.x)==a.x) ? a : b;
-	var max = (min===a) ? b : a;
+	var min = (Math.min(a.x, b.x) == a.x) ? a : b;
+	var max = (min === a) ? b : a;
 	var distance = cutToRange(
-		300, 0, Math.min(max.x-min.x, Math.abs(max.y-min.y))*1.2);
+		300, 0, Math.min(max.x - min.x, Math.abs(max.y - min.y)) * 1.2);
 	return [min.x, min.y,
 		min.x + distance, min.y,
 		max.x - distance, max.y,
@@ -88,8 +89,8 @@ function byChildrenOrder(a, b) {
 	}
 }
 
-function undef(x) {
-	return typeof x == "undefined";
+function def(x) {
+	return typeof x != "undefined";
 }
 
 function isFunction(f) {
@@ -101,18 +102,34 @@ function measureText(text) {
 }
 
 function connectNodes(parentNode, childNode) {
-	parentNode.connect(childNode);
 	childNode.connect(parentNode);
-	parentNode.updateCurve();
+	parentNode.connect(childNode);
 }
 
 function connectAttrWithTitleContainer(attributeItem, titleContainer) {
-	connectNodes(titleContainer.getNode(), attributeItem.getNode());
-	attributeItem.setAttrType(titleContainer.getValue());
+	if (attributeItem instanceof AttributeItem
+		&& titleContainer instanceof TitleContainerItem) {
+		connectNodes(attributeItem.getNode(), titleContainer.getNode());
+		attributeItem.setValue(titleContainer.getValue());
+	}
 }
 
 function hasChildren(item) {
 	return item.hasOwnProperty("children");
+}
+
+function drawGrid(spacing) {
+	stroke(ALMOST_BLACK, 50);
+	noFill();
+	strokeWeight(THIN);
+
+	for (let x = 0; x < Math.ceil(width / spacing); x++) {
+		line(x * spacing, 0, x * spacing, height);
+	}
+
+	for (let y = 0; y < Math.ceil(height / spacing); y++) {
+		line(0, y * spacing, width, y * spacing);
+	}
 }
 
 Array.prototype.sum = function(itemFunction) {
@@ -177,10 +194,18 @@ Array.prototype.remove = function(item) {
 }
 
 
+Array.prototype.extend = function(otherArray) {
+	if (!(otherArray instanceof Array)) { return; }
+	for (let item of otherArray) {
+		this.push(item);
+	}
+}
+
+
 class Compass {
 	constructor(top, right, bottom, left) {
-		if (undef(right) && undef(bottom) && undef(left)) {
-			if (undef(top)) {
+		if (!def(right) && !def(bottom) && !def(left)) {
+			if (!def(top)) {
 				this.top = 0;
 				this.right = 0;
 				this.bottom = 0;
@@ -200,7 +225,7 @@ class Compass {
 	}
 
 	setValues(top, right, bottom, left) {
-		if (!undef(top) && undef(right) && undef(bottom) && undef(left)) {
+		if (def(top) && !def(right) && !def(bottom) && !def(left)) {
 			this.top = top;
 			this.right = top;
 			this.bottom = top;
@@ -224,7 +249,7 @@ class Compass {
 
 class Point {
 	constructor(x, y) {
-		if (undef(x) && undef(y)) {
+		if (!def(x) && !def(y)) {
 			this.x = 0;
 			this.y = 0;
 		} else {

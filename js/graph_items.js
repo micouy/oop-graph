@@ -12,7 +12,7 @@ class GraphItem {
 			this.y = this.relativePosition.y;
 		}
 
-		if (!undef(order)) {
+		if (def(order)) {
 			this.order = order;
 		}
 
@@ -25,9 +25,7 @@ class GraphItem {
 		this.margin = new Compass();
 	}
 
-
-	setFixedWidth(width) { this.fixedWidth = width; return this; }
-	setFixedHeight(height) { this.fixedHeight = height; return this; }
+	// getters
 	getMarginX() { return this.margin.getX(); }
 	getMarginY() { return this.margin.getY(); }
 	getTotalWidth() { return this.totalWidth; }
@@ -38,8 +36,43 @@ class GraphItem {
 	getWidth() { return this.width; }
 	getHeight() { return this.height; }
 	getParent() { return this.parent; }
-	setOrder(order) { this.order = order; }
 	getOrder() { return this.order; }
+
+	getClassItem() {
+		let parent = this.getUltimateParent();
+
+		return parent instanceof ClassItem ? parent : null;
+	}
+
+	getUltimateParent() {
+		let parent = this;
+
+		while (!!parent.getParent()) {
+			parent = parent.getParent();
+		}
+
+		return parent;
+	}
+
+	getDescendants() {
+		let found = [];
+
+		if (!hasChildren(this)) { return []; }
+
+		for (let child of this.children) {
+			if (child instanceof Divider) { continue; }
+
+			found.push(child);
+			found.extend(child.getDescendants());
+		}
+
+		return found;
+	}
+
+	// setters
+	setOrder(order) { this.order = order; }
+	setFixedWidth(width) { this.fixedWidth = width; return this; }
+	setFixedHeight(height) { this.fixedHeight = height; return this; }
 
 	setMargin(top, right, bottom, left) {
 		this.margin.setValues(top, right, bottom, left);
@@ -47,13 +80,14 @@ class GraphItem {
 		return this;
 	}
 
+	// updaters
 	updatePosition() {
 		if (this.parent) {
 			this.x = this.parent.x + this.relativePosition.getX() + this.margin.getLeft();
 			this.y = this.parent.y + this.relativePosition.getY() + this.margin.getTop();
 		}
 
-		if (this instanceof Container) {
+		if (this instanceof ContainerItem) {
 			for (let child of this.children) {
 				child.updatePosition();
 			}
@@ -71,68 +105,121 @@ class GraphItem {
 		this.totalHeight = this.height + this.margin.getY();
 	}
 
-	hasDescendant(object) {
+	// conditions
+	overlaps(x, y) {
+		return !(x < this.x || x > this.x + this.width || y < this.y || y > this.y + this.height);
+	}
+
+	hasDescendant(thing) {
 		if (hasChildren(this)) {
 			for (let child of this.children) {
-				if (child == object) { return true; }
-				else if (child.hasDescendant(object)) { return true; }
+				if (child instanceof Divider) { continue; }
+				if (child.is(thing)) { return true; }
+				else if (child.hasDescendant(thing)) { return true; }
 			}
 		}
 
 		return false;
 	}
 
-	hasInFamily(object) {
-		let parent = this.parent;
-		if (!parent) { return false; }
-
-		while (!!parent.getParent()) {
-			parent = parent.getParent();
+	is(thing) {
+		if (typeof thing == "object") {
+			return this === thing;
+		} else {
+			return this instanceof thing;
 		}
-
-		return parent.hasDescendant(object);
 	}
 
-	findAmongChildren(cls) {
+	hasInFamily(thing) {
+		return this.getUltimateParent().hasDescendant(thing);
+	}
+
+	// finding things
+	findAmongChildren(thing) {
 		let found = [];
+		let findMany = typeof thing == "object" ? false : true;
 
 		if (hasChildren(this)) {
 			for (let child of this.children) {
-				if (child instanceof cls) { found.push(child); }
-				else { found.extend(child.findInFamily(cls)); }
+				if (child instanceof Divider) { continue; }
+
+				if (child.is(thing)) {
+					if (!findMany) {
+						return child;
+					} else {
+						found.push(child);
+					}
+				} else {
+					found.extend(child.findAmongChildren(thing));
+				}
 			}
 		}
 
 		return found;
 	}
 
-	findInFamily(cls) {
-		return this.getObjectItem().findAmongChildren();
-	}
+	findClosestAncestor(cls) {
+		let parent = this.getParent();
 
-	getObjectItem() {
-		let parent = this.parent;
-		if (!parent) { return this instanceof ObjectItem ? this : null; }
+		if (!parent) { return null; }
 
-		while (!!parent.getParent()) {
-			parent = parent.getParent();
+		while (!!parent) {
+			if (parent.is(cls)) { return parent; }
+			else { parent = parent.getParent(); }
 		}
 
-		return parent instanceof ObjectItem ? parent : null;
+		return null;
 	}
 
-	draw() { }
+	findInFamily(thing) {
+		let found = [];
+		let temporaryParent = this.getParent();
+
+		while (!!temporaryParent) {
+			for (let child of temporaryParent.getChildren()) {
+				if (child.is(thing)) { found.push(child); }
+			}
+
+			if (temporaryParent.is(thing)) { found.push(temporaryParent); }
+
+			temporaryParent = temporaryParent.getParent();
+		}
+
+		return found;
+	}
 
 	drawBounds() {
 		noFill();
 		stroke(RED);
 		strokeWeight(MEDIUM);
-		rect(this.x, this.y, this.totalWidth, this.totalHeight);
+		rect(this.x - this.margin.getLeft(), this.y - this.margin.getTop(), this.totalWidth, this.totalHeight);
 	}
+
+	// TODO
+	// drawPadding() {
+	// 	fill(0, 50, 255, 50);
+	// 	noStroke();
+	// 	rect(this.x, this.y, this.padding.getLeft(), this.totalHeight);
+	// 	rect(this.x + this.totalWidth - this.padding.getRight(), this.y, this.padding.getRight(), this.totalHeight);
+	// 	rect(this.x + this.padding.getLeft(), this.y, this.width, this.padding.getTop());
+	// 	rect(this.x + this.padding.getLeft(), this.y + this.totalHeight - this.padding.getBottom(), this.width, this.padding.getBottom())
+	// }
+  //
+	// drawMargin() {
+	// 	fill(0, 255, 50, 50);
+	// 	noStroke();
+	// 	rect(this.x - this.padding.getLeft(), this.y, this.padding.getLeft(), this.totalHeight);
+	// 	rect(this.x + this.totalWidth - this.padding.getRight(), this.y, this.padding.getRight(), this.totalHeight);
+	// 	rect(this.x + this.padding.getLeft(), this.y, this.width, this.padding.getTop());
+	// 	rect(this.x + this.padding.getLeft(), this.y + this.totalHeight - this.padding.getBottom(), this.width, this.padding.getBottom())
+	// }
+
+	// undefined
+	draw() { }
 }
 
 
-class Container extends GraphItem {
+class ContainerItem extends GraphItem {
 	constructor(graph, parent, width, height) {
 		super(graph, parent, width, height);
 		this.childrenOrder = 0;
@@ -140,14 +227,21 @@ class Container extends GraphItem {
 		this.children = [];
 		this.contentDirection = COLUMN;
 		this.contentAlignment = START;
+
 		if (this.parent) {
 			this.z = this.parent.getZ() + 1;
 		}
 	}
 
+	// getters
+	getPaddingX() { return this.padding.getX(); }
+	getPaddingY() { return this.padding.getY(); }
+	getZ() { if (def(this.z)) return this.z; }
+	getChildren() { return this.children; }
+
+	// setters
 	setPadding(top, right, bottom, left) {
 		this.padding.setValues(top, right, bottom, left);
-
 		this.rearrange();
 
 		if (this.parent) {
@@ -164,10 +258,8 @@ class Container extends GraphItem {
 	}
 
 	setContentAlignment(alignment) { this.contentAlignment = alignment; }
-	getPaddingX() { return this.padding.getX(); }
-	getPaddingY() { return this.padding.getY(); }
-	getZ() { if (this.z) return this.z; }
 
+	// children related
 	addChild(newChild) {
 		if (!newChild.getOrder()) {
 			newChild.setOrder(this.childrenOrder);
@@ -190,11 +282,9 @@ class Container extends GraphItem {
 			child.updateTotalSize();
 			children.push(child);
 		}
-		this.children.push.apply(this.children, children);
+		this.children.extend(children);
 		this.rearrange();
 	}
-
-	getChildren() { return this.children; }
 
 	updateDividers() {
 		for (let child of this.children) {
@@ -208,9 +298,11 @@ class Container extends GraphItem {
 	rearrange() {
 		if (!this.children.length) {
 			this.updateTotalSize();
+
 			if (this.parent) {
 				this.parent.rearrange();
 			}
+
 			return;
 		}
 
@@ -273,6 +365,7 @@ class Container extends GraphItem {
 		}
 	}
 
+	// drawing
 	drawChildren() {
 		for (let child of this.children) {
 			child.draw();
@@ -293,12 +386,10 @@ class ClickableItem extends GraphItem {
 		this.z = this.parent.getZ() + 1;
 	}
 
+	// getters
 	getZ() { return this.z; }
 
-	overlaps(x, y) {
-		return !(x < this.x || x > this.x + this.width || y < this.y || y > this.y + this.height);
-	}
-
+	// interaction
 	click(x, y) {
 		this.mouseRelativePosition = new Point(this.x - x, this.y - y);
 	}
@@ -307,6 +398,7 @@ class ClickableItem extends GraphItem {
 		this.mouseRelativePosition = null;
 	}
 
+	// undefined
 	mouseOver() { }
 	mouseOut() { }
 	doubleClick() { }
@@ -316,7 +408,7 @@ class ClickableItem extends GraphItem {
 }
 
 
-class ObjectItem extends Container {
+class ClassItem extends ContainerItem {
 	constructor(graph, x, y, z) {
 		super(graph, null, 200, 60);
 		delete this.margin;
@@ -328,30 +420,37 @@ class ObjectItem extends Container {
 		this.z = z;
 		this.name = "";
 
-		this.titleContainer = new TitleContainer(graph, this);
-		this.mainContainer = new Container(graph, this, this.width, 100);
+		this.titleContainerItem = new TitleContainerItem(graph, this);
+		this.mainContainerItem = new ContainerItem(graph, this, this.width, 100);
 		this.addChildren([
-			this.titleContainer,
+			this.titleContainerItem,
 			new Divider(graph, this),
-			this.mainContainer,
+			this.mainContainerItem,
 		]);
-		this.mainContainer.addChild(new AttributeItem(graph, this.mainContainer));
-		this.mainContainer.addChild(new AttributeItem(graph, this.mainContainer));
-		this.mainContainer.addChild(new Button(graph, this.mainContainer, function(button) {
-			button.parent.addChild(new AttributeItem(button.graph, button.parent));
-		}, "last"));
+		this.mainContainerItem.addChild(new AttributeItem(graph, this.mainContainerItem));
+		this.mainContainerItem.addChild(new Button(graph,
+			this.mainContainerItem,
+			function(button) {
+				button.parent.addChild(new AttributeItem(button.graph, button.parent));
+			},
+			"last"));
 	}
 
-	setType(value) {
-		this.titleContainer.setType(value);
-	}
-
+	// getters
 	getZ() { return this.z; }
 
-	overlaps(x, y) {
-		return !(x < this.x || x > this.x + this.width || y < this.y || y > this.y + this.height);
+	// setters
+	setType(value) {
+		this.titleContainerItem.setValue(value);
 	}
 
+	// updaters
+	updateTotalSize() {
+		this.totalWidth = this.width;
+		this.totalHeight = this.height;
+	}
+
+	// interaction
 	click(x, y) {
 		this.mouseRelativePosition = new Point(this.x - x, this.y - y);
 	}
@@ -369,16 +468,12 @@ class ObjectItem extends Container {
 		}
 	}
 
-	updateTotalSize() {
-		this.totalWidth = this.width;
-		this.totalHeight = this.height;
-	}
-
 	drop() {
 		this.mouseRelativePosition = null;
 		this.updatePosition();
 	}
 
+	// drawing
 	draw() {
 		fill(255, 255, 255, 230);
 		stroke(DARK_GRAY);
@@ -387,6 +482,7 @@ class ObjectItem extends Container {
 		this.drawChildren();
 	}
 
+	// undefined
 	mouseOver() { }
 	mouseOut() { }
 }
@@ -406,14 +502,16 @@ class Divider {
 		this.updateSize();
 	}
 
+	// getters
 	getOrder() { return this.order; }
-	setOrder(order) { this.order = order; }
 	getTotalWidth() { return this.totalWidth; }
 	getTotalHeight() { return this.totalHeight; }
-	hasInFamily() { return false; }
-	hasDescendant() { return false; }
-	updateTotalSize() {	}
 
+	// setters
+	setOrder(order) { this.order = order; }
+	setDirection(direction) { this.direction = direction; }
+
+	// updaters
 	updatePosition() {
 		this.x = this.parent.x + this.relativePosition.getX() + this.margin;
 		this.y = this.parent.y + this.relativePosition.getY() + this.margin;
@@ -431,10 +529,6 @@ class Divider {
 		this.updatePosition();
 	}
 
-	setDirection(direction) {
-		this.direction = direction;
-	}
-
 	updateSize() {
 		if (this.direction == COLUMN) {
 			this.width = this.parent.width - this.margin * 2;
@@ -449,6 +543,19 @@ class Divider {
 		}
 	}
 
+	// conditions
+	is(thing) {
+		if (typeof thing == "object") {
+			return this === thing;
+		} else {
+			return this instanceof thing;
+		}
+	}
+
+	hasInFamily() { return false; }
+	hasDescendant() { return false; }
+
+	// drawing
 	draw() {
 		noFill();
 		stroke(GRAY);
@@ -458,6 +565,9 @@ class Divider {
 			dashedLine(this.x, this.y, this.x, this.y + this.height, this.lineLength);
 		}
 	}
+
+	// undefined
+	updateTotalSize() {	}
 }
 
 
@@ -471,8 +581,24 @@ class Node extends ClickableItem {
 		this.temporaryCurve = [];
 	}
 
+	// getters
 	getZ() { return 1000; }
 
+	getCurveToNode(node) {
+		if (node) {
+			let a = {
+				x: this.x + this.diameter / 2,
+				y: this.y + this.diameter / 2,
+			};
+			let b = {
+				x: node.x + this.diameter / 2,
+				y: node.y + this.diameter / 2,
+			};
+			return getBezierCurve(a, b);
+		}
+	}
+
+	// interaction
 	drop() {
 		this.temporaryNode = null;
 	}
@@ -491,20 +617,7 @@ class Node extends ClickableItem {
 		this.temporaryCurve = getBezierCurve(a, b);
 	}
 
-	getCurveToNode(node) {
-		if (node) {
-			let a = {
-				x: this.x + this.diameter / 2,
-				y: this.y + this.diameter / 2
-			};
-			let b = {
-				x: node.x + this.diameter / 2,
-				y: node.y + this.diameter / 2
-			};
-			return getBezierCurve(a, b);
-		}
-	}
-
+	// drawing
 	draw() {
 		fill(LIGHT_GRAY);
 		let c = color(DARK_GRAY);
@@ -525,30 +638,23 @@ class Node extends ClickableItem {
 }
 
 
-class ParentNode extends Node {
+class ChildNode extends Node {
 	constructor(graph, parent, order) {
 		super(graph, parent, order);
-		this.childNode = null;
+		this.parentNode = null;
 		this.curve = [];
 	}
 
-	updateAttributeType(value) {
-		this.parent.typeField.setValue(value);
+	// setters
+	setValue(value) {
+		this.findClosestAncestor(AttributeItem).setValue(value);
 	}
 
-	click(x, y) {
-		super.click(x, y);
-
-		if (this.childNode) { return; }
-
-		this.temporaryNode = new Point(this.x, this.y);
-		this.drag(x, y);
-	}
-
+	// updaters
 	updateCurve() {
-		if (!this.childNode) { return; }
+		if (!this.parentNode) { return; }
 
-		this.curve = this.getCurveToNode(this.childNode);
+		this.curve = this.getCurveToNode(this.parentNode);
 	}
 
 	updatePosition() {
@@ -556,46 +662,40 @@ class ParentNode extends Node {
 		this.updateCurve();
 	}
 
-	connectable() { return !!this.childNode; }
+	// conditions
+	connectable() { return !this.parentNode; }
 
-	connect(node) {
-		if (node instanceof ChildNode && this.connectable()) {
-			this.parentNodes.push(parentNode);
-		}
-	}
+	// interaction
+	click(x, y) {
+		super.click(x, y);
 
-	disconnect() {
-		this.childNode = null;
-		this.curve = [];
+		if (this.parentNode) { return; }
+
+		this.temporaryNode = new Point(this.x, this.y);
+		this.drag(x, y);
 	}
 
 	drag(x, y) {
-		if (this.childNode) { return; }
+		if (this.parentNode) { return; }
 
 		super.drag(x, y);
 	}
 
 	doubleClick() {
-		if (this.childNode) {
-			this.childNode.removeParentNode(this);
-			this.removeChildNode();
+		if (this.parentNode) {
+			this.parentNode.disconnect(this);
+			this.disconnect();
 		}
 	}
 
 	drop() {
-		if (this.childNode) { return; }
+		if (this.parentNode) { return; }
 
 		super.drop();
-		let items = this.graph.getClickableItems();
-		let queue = [];
 
-		for (let item of items) {
-			if (item instanceof ChildNode) {
-				if (item.overlaps(mouseX, mouseY)) {
-					queue.push(item);
-				}
-			}
-		}
+		let queue = this.graph.getItemsAt(mouseX, mouseY, function (item) {
+			return item instanceof ParentNode;
+		});
 
 		if (queue.length) {
 			queue.sort(byZ);
@@ -603,50 +703,51 @@ class ParentNode extends Node {
 			for (let node of queue) {
 				if (!this.hasInFamily(node)) {
 					connectAttrWithTitleContainer(
-						node.findInFamily(TitleContainer)[0],
-						this.findInFamily(AttributeItem)[0]
+						this.findInFamily(AttributeItem)[0],
+						node.findInFamily(TitleContainerItem)[0]
 					);
+
 					break;
 				}
 			}
 		}
 	}
 
+	connect(parentNode) {
+		if (parentNode instanceof ParentNode && this.connectable()) {
+			this.parentNode = parentNode;
+		}
+	}
+
+	disconnect() {
+		this.parentNode = null;
+		this.findClosestAncestor(AttributeItem).setValue("");
+		this.curve = [];
+	}
+
+	// drawing
 	draw() {
 		super.draw();
-		if (this.childNode) {
+
+		if (this.parentNode) {
 			noFill();
-			let c = color(DARK_GRAY, 120);
-			stroke(c);
+			stroke(DARK_GRAY, 120);
 			bezier(...this.curve);
 		}
 	}
 }
 
 
-class ChildNode extends Node {
+class ParentNode extends Node {
 	constructor(graph, parent, order) {
 		super(graph, parent, order);
-		this.parentNodes = [];
+		this.childNodes = [];
 	}
 
-	setValue(value) {
-		let objectItem = this.getObjectItem();
-		for (let parentNode of this.parentNodes) {
-			parentNode.updateAttributeType(value);
-		}
-		objectItem.setValue(value);
-	}
-
-	click(x, y) {
-		super.click(x, y);
-		this.temporaryNode = new Point(this.x, this.y);
-		this.drag(x, y);
-	}
-
+	// updaters
 	updateCurve() {
-		for (let parentNode of this.parentNodes) {
-			parentNode.updateCurve();
+		for (let childNode of this.childNodes) {
+			childNode.updateCurve();
 		}
 	}
 
@@ -655,290 +756,425 @@ class ChildNode extends Node {
 		this.updateCurve();
 	}
 
-	connect(node) {
-		if (node instanceof ParentNode && node.connectable()) {
-			this.parentNodes.push(parentNode);
-		}
-	}
-
-	disconnect(node) {
-		this.parentNodes.remove(node);
+	// interaction
+	click(x, y) {
+		super.click(x, y);
+		this.temporaryNode = new Point(this.x, this.y);
+		this.drag(x, y);
 	}
 
 	drop() {
 		super.drop();
-		let items = this.graph.getClickableItems();
-		let queue = [];
-
-		for (let item of items) {
-			if (item instanceof ParentNode) {
-				if (item.overlaps(mouseX, mouseY)) {
-					queue.push(item);
-				}
-			}
-		}
+		let queue = this.graph.getItemsAt(mouseX, mouseY, function (item) {
+			return item instanceof ChildNode && item.connectable();
+		});
 
 		if (queue.length) {
 			queue.sort(byZ);
+
 			for (let node of queue) {
-				if (!this.hasInFamily(node) && !node.connectable()) {
+				if (!this.hasInFamily(node)) {
 					connectAttrWithTitleContainer(
-						this.findInFamily(TitleContainer)[0],
-						node.findInFamily(AttributeItem)[0]
+						node.findInFamily(AttributeItem)[0],
+						this.findInFamily(TitleContainerItem)[0]
 					);
+
 					break;
 				}
 			}
 		}
 	}
+
+	connect(childNode) {
+		if (childNode instanceof ChildNode && childNode.connectable()) {
+			this.childNodes.push(childNode);
+		}
+	}
+
+	disconnect(node) {
+		this.childNodes.remove(node);
+	}
+
+	notifyParentsAboutNewValue(value) {
+		for (let childNode of this.childNodes) {
+			childNode.setValue(value);
+		}
+	}
 }
 
 
-class TitleContainer extends Container {
+class TitleContainerItem extends ContainerItem {
 	constructor(graph, parent, order) {
 		super(graph, parent, 150, 30, order);
 		this.setContentDirection(ROW);
 		this.setContentAlignment(CENTER);
-		this.node = new ChildNode(graph, this);
-		this.typeInput = new TextInput(graph, this).setMargin(0, 5, 0, 0);
+		this.attributeItems = [];
+		this.node = new ParentNode(graph, this);
+		this.typeInput = new InputItem(graph, this);
 		this.typeInput.afterInput = function() {
-			this.parent.updateType();
+			this.parent.updateValue();
 		}
 		this.addChildren([
 			this.node,
 			this.typeInput,
 		]);
+		this.updateValue();
 	}
 
+	// getters
 	getNode() { return this.node; }
+	getValue() { return this.typeInput.getValue(); }
 
-	setType(type) {
+	// setters
+	setValue(type) {
 		this.typeInput.setValue(type);
+
 		return this;
 	}
 
-	getType() { return this.value; }
-
-	updateType() {
-		this.value = this.typeField.value();
+	// updaters
+	updateValue() {
+		this.node.notifyParentsAboutNewValue(this.typeInput.getValue());
 	}
 
+	// interaction
+	connect(attributeItem) {
+		connectAttrWithTitleContainer(attributeItem, this);
+	}
+
+	disconnect(attributeItem) {
+		this.attributeItems.remove(attributeItem);
+		this.node.disconnect(attributeItem.getNode());
+		attributeItem.disconnect();
+	}
 }
 
 
-class AttributeItem extends Container {
+class AttributeItem extends ContainerItem {
 	constructor(graph, parent, order) {
 		super(graph, parent, 150, 30, order);
 		this.setContentDirection(ROW);
 		this.setContentAlignment(CENTER);
-		this.nameInput = new TextInput(graph, this).setMargin(0, 5, 0, 0);
-		this.typeField = new TextBoard(graph, this);
-		this.node = new ParentNode(graph, this);
+		this.titleContainerItem = null;
+		this.nameInput = new InputItem(graph, this);
+		this.typeField = new TextFieldItem(graph, this);
+		this.node = new ChildNode(graph, this);
 		this.addChildren([
 			this.nameInput,
-			new TextBoard(graph, this).setValue(" : "),
+			new TextFieldItem(graph, this).setValue(":").setMargin(0, 5, 0, 5),
 			this.typeField,
 			this.node,
 		]);
 	}
 
+	// getters
 	getNode() { return this.node; }
 
-	setAttrType(type) {
-		this.typeField.setValue(type);
+	// setters
+	setValue(type) { this.typeField.setValue(type); }
+
+	// interaction
+	connect(titleContainerItem) {
+		connectAttrWithTitleContainer(this, titleContainerItem);
+	}
+
+	disconnect() {
+		this.titleContainer = null;
+		this.node.disconnect();
 	}
 }
 
 
-class UIItem extends GraphItem {
-	constructor(graph, parent, width, height, order) {
-		super(graph, parent, width, height, order);
-		delete this.children;
-		delete this.contentDirection;
-		this.graph = graph;
-		this.parent = parent;
-		this.x = this.parent.x;
-		this.y = this.parent.y;
-		this.relativePosition = new Point();
-	}
-
-	addChild() { }
-	addChildren() { }
-	rearrange() { }
-
-	updatePosition() {
-		this.x = this.parent.x + this.relativePosition.x + this.margin.left;
-		this.y = this.parent.y + this.relativePosition.y + this.margin.top;
-	}
-}
-
-class ClickableUIItem extends ClickableItem {
-	constructor(graph, parent, width, height, order) {
-		super(graph, parent, width, height, order);
-		delete this.children;
-		delete this.contentDirection;
-		this.graph = graph;
-		this.parent = parent;
-		this.x = this.parent.x;
-		this.y = this.parent.y;
-		this.relativePosition = new Point();
-	}
-
-	addChild() { }
-	addChildren() { }
-	rearrange() { }
-
-	updatePosition() {
-		this.x = this.parent.x + this.relativePosition.x + this.margin.left;
-		this.y = this.parent.y + this.relativePosition.y + this.margin.top;
-	}
-}
-
-
-class TextInput extends ClickableUIItem {
+class TextFieldItem extends GraphItem {
 	constructor(graph, parent, order) {
-		super(graph, parent, 80, 30, order);
-		this.text = "";
-		this.inputActive = false;
-		this.element = createInput(this.text);
-		this.element.owner = this;
-		this.element.initialWidth = this.width;
-		this.element.initialHeight = this.height;
-		this.element.actualWidth = this.width;
-		this.element.actualHeight = this.height;
-		this.element
-			.size(this.width, this.height)
-			.style("border", "none")
-			.style("outline", "none")
-			.style("font-size", fontSize + "px")
-			.style("background", color(ALMOST_WHITE))
-			.style("color", color(ALMOST_BLACK))
-			.attribute("spellcheck", false);
-
-		this.element.input(function() {
-			this.owner.updateSize();
-			this.owner.updateText();
-			this.owner.afterInput();
-		});
-
-		this.element.changed(function() {
-			this.owner.afterChange();
-		});
-
-		this.element.updateSize = function() {
-			let width = Math.max(measureText(this.value()), this.initialWidth);
-			this.size(width, this.initialHeight);
-			this.actualWidth = width;
-		}
-
-		this.element.elt.addEventListener("blur", function() {
-			this.style.display = "none";
-		});
-
-		this.element.hide();
-		this.updateSize();
-	}
-
-	setValue(value) {
-		this.element.value(value);
-		this.updateSize();
-
-		return this;
-	}
-
-	getValue() { return this.element.value(); }
-
-	updateSize() {
-		this.element.updateSize();
-		this.rearrange();
-	}
-
-	updatePosition(x, y) {
-		super.updatePosition(x, y);
-		this.element.position(this.x, this.y);
-	}
-
-	updateText() {
-		this.text = this.element.value();
-	}
-
-	rearrange() {
-		this.width = this.element.actualWidth;
-		this.totalWidth = this.width + this.margin.getX();
-		this.parent.rearrange();
-	}
-
-	mouseOver() {
-		this.element.show();
-	}
-
-	mouseOut() {
-		if (this.element.elt != document.activeElement) {
-			this.element.hide();
-		}
-	}
-
-	draw() {
-		noStroke();
-		fill(ALMOST_WHITE);
-		rect(this.x, this.y, this.width, this.height);
-		fill(ALMOST_BLACK);
-		text(this.element.value(), this.x, this.y + 4);
-	}
-
-	afterChange() { }
-	afterInput() { }
-}
-
-
-class TextField extends UIItem {
-	constructor(graph, parent, order) {
-		super(graph, parent, 50, 30, order);
+		super(graph, parent, 20, 30, order);
 		this.padding = new Compass(0, 10, 0, 10);
 		this.initialWidth = this.width;
 		this.value = "";
+		this.textColor = ALMOST_BLACK;
+		this.updateValue();
+		this.updateSize();
 	}
 
+	// getters
+	getValue() { return this.value; }
+
+	// setters
 	setValue(value) {
 		this.value = value;
+		this.updateValue();
 		this.updateSize();
 
 		return this;
 	}
 
-	getValue() { return this.value; }
-
+	// updaters
 	updateSize() {
-		this.width = Math.max(measureText(this.value), this.initialWidth);
-		this.totalWidth = this.width + this.padding.getX();
+		let textWidth = Math.max(measureText(this.value), this.initialWidth);
+		this.width = textWidth;
+		this.totalWidth = textWidth + this.padding.getX() + this.margin.getX();
 		this.parent.rearrange();
 	}
 
+	updateValue() {
+		if (!!this.value.length) {
+			this.textColor = ALMOST_BLACK;
+		} else {
+			this.textColor = RED;
+		}
+
+		this.value = !!this.value.length ? this.value : "-";
+	}
+
+	// drawing
 	draw() {
-		this.drawBounds();
 		noStroke();
-		fill(ALMOST_BLACK);
-		text(this.value, this.x + this.padding.getLeft(), this.y + this.padding.getTop());
+		fill(this.textColor);
+		text(this.value,
+			this.x + this.padding.getLeft(),
+			this.y + this.padding.getTop());
+	}
+
+	// undefined
+	updateTotalSize() { }
+}
+
+
+class OptionInputItem extends ClickableItem {
+	constructor(graph, parent, order) {
+		super(graph, parent, 50, 20, order);
+		this.options = [];
+	}
+
+	// drawing
+	draw() {
+		let y = 0;
+		for (let option of this.options) {
+
+		}
 	}
 }
 
 
-class Button extends ClickableUIItem {
+class Button extends ClickableItem {
 	constructor(graph, parent, action, order) {
 		super(graph, parent, 20, 20, order);
 		this.setMargin(5);
-		this.graph = graph;
-		this.parent = parent;
 		this.action = action;
 		this.padding = new Compass(5);
 		this.style = BUTTON_STYLE.ADD;
 	}
 
+	// interaction
 	click() {
 		this.action(this);
 	}
 
+	// drawing
 	draw() {
 		this.style(this.x + this.padding.getLeft(), this.y + this.padding.getTop());
 	}
+}
+
+
+class InputItem extends ClickableItem {
+	constructor(graph, parent, order) {
+		super(graph, parent, 50, 20, order);
+		this.padding = new Compass(4);
+		this.totalHeight = this.height + this.padding.getY();
+		this.totalWidth = this.width + this.padding.getX();
+    this.value = "";
+    this.minWidth = 50;
+    this.active = false;
+    this.cursor = null;
+		this.lastCursorMove = 0;
+		this.selection = { a: null, b: null }
+    this.selecting = false;
+  }
+
+	// getters
+	getValue() { return this.value; }
+  getZ() { return this.z; }
+
+	// updaters
+	updateSize() {
+    this.width = Math.max(this.minWidth, textWidth(this.value));
+		this.totalWidth = this.width + this.padding.getX();
+		this.parent.rearrange();
+  }
+
+	// interaction
+  activate() {
+    this.active = true;
+    this.putCursor();
+  }
+
+  deactivate() {
+    this.active = false;
+		this.afterChange();
+  }
+
+	// typing related
+  charPressed(char) {
+    this.putChar(char);
+  }
+
+  keysPressed(keys) {
+    if (keys.alt) {
+      if (keys.leftArrow) {
+        this.moveCursorToLeft(1);
+      } else if (keys.rightArrow) {
+        this.moveCursorToRight(1);
+      } else if (keys.backspace) {
+        this.removeChars(1);
+      }
+    } else if (keys.leftArrow) {
+      this.moveCursorToLeft();
+    } else if (keys.rightArrow) {
+      this.moveCursorToRight();
+    } else if (keys.backspace) {
+      this.removeChars();
+    }
+  }
+
+  removeChars(mode) {
+    mode = mode || 0;
+    let prevCursor = this.cursor;
+    this.moveCursorToLeft(mode);
+    this.value = this.value.slice(0, this.cursor)
+	    .concat(this.value.slice(prevCursor, this.value.length));
+    this.updateSize();
+		this.afterInput();
+  }
+
+  putChar(char) {
+    let firstPart = this.value.slice(0, this.cursor) || "";
+    let secondPart = this.value.slice(this.cursor, this.value.length) || "";
+    firstPart += char;
+    this.value = firstPart.concat(secondPart);
+    this.moveCursorToRight();
+    this.updateSize();
+		this.afterInput();
+  }
+
+	moveCursorTo(x) {
+		this.lastCursorMove = millis();
+		this.cursor = x;
+	}
+
+  putCursor() {
+    let array = [];
+    let sum = 0;
+    let index = 0;
+
+    for (let ch of this.value) {
+      array.push(textWidth(ch));
+    }
+
+    for (let i = 0; i < array.length; i++) {
+      index = i;
+
+      if (this.x + sum + array[i] > mouseX) {
+        if (mouseX - (this.x + sum) < (this.x + sum + array[i]) - mouseX) {
+          break;
+        } else {
+          index = i + 1;
+
+          break;
+        }
+      } else {
+        sum += array[i];
+      }
+    }
+
+    this.moveCursorTo(index);
+  }
+
+  moveCursorToRight(mode) {
+    mode = mode || 0;
+
+    if (mode == 0) {
+      this.moveCursorTo(Math.min(this.value.length, this.cursor + 1));
+    } else if (mode == 1) {
+      let value = this.value
+	      .replace(/([a-z])([A-Z])/g, "$1 $2")
+	      .replace(/([a-z])([_])/g, "$1 $2")
+	      .split(" ");
+      let array = [];
+      let sum = this.value.length;
+
+      for (let word of value) {
+        array.push(word.length);
+      }
+
+      for (let i = array.length - 1; i >= 0; i--) {
+        if (sum - array[i] <= this.cursor) {
+          break;
+        } else {
+          sum -= array[i];
+        }
+      }
+
+			this.moveCursorTo(sum);
+    }
+  }
+
+  moveCursorToLeft(mode) {
+    mode = mode || 0;
+
+    if (mode == 0) {
+      this.moveCursorTo(Math.max(0, this.cursor - 1));
+    } else if (mode == 1) {
+      let value = this.value
+	      .replace(/([a-z])([A-Z])/g, "$1 $2")
+	      .replace(/([_])([a-z])/g, "$1 $2")
+	      .split(" ");
+      let array = [];
+      let sum = 0;
+
+      for (let word of value) {
+        array.push(word.length);
+      }
+
+      for (let i = 0; i < array.length; i++) {
+        if (sum + array[i] >= this.cursor) {
+          break;
+        } else {
+          sum += array[i];
+        }
+      }
+
+      this.moveCursorTo(sum);
+    }
+  }
+
+	// drawing
+  draw() {
+    fill(this.value.length || this.active ? [0, 0, 0, 0] : [255, 0, 0, 30]);
+    stroke(DARK_GRAY);
+		strokeWeight(MEDIUM);
+    rect(this.x, this.y, this.totalWidth, this.totalHeight, 3);
+
+    fill(DARK_GRAY);
+    noStroke();
+    text(this.value, this.x + this.padding.getLeft(),
+			this.y + this.padding.getTop());
+
+    if (this.active) {
+      noFill();
+      stroke(DARK_GRAY,
+				+(millis() % 1000 > 500 || millis() < this.lastCursorMove + 300) * 255);
+			strokeWeight(MEDIUM);
+      let x = textWidth(this.value.slice(0, this.cursor));
+      line(this.x + this.padding.getLeft() + x,
+				this.y + this.padding.getTop(),
+				this.x + this.padding.getLeft() + x,
+				this.y + this.padding.getTop() + this.height);
+    }
+  }
+
+	// undefined
+	updateTotalSize() { }
+	afterInput() { }
+	afterChange() { }
 }
